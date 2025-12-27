@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from app.core.deps import get_current_user, require_roles
 from app.core.pagination import paginate
-from app.models import PaymentMethod
+from app.models import PaymentMethod, CashEntry
 from app.schemas.appointment import AppointmentCreate, AppointmentOut
 from app.crud.appointments import create_appointment
 from app.core.public_cache import public_cache
@@ -95,20 +95,38 @@ def confirm_appointment(
     appt = db.get(Appointment, appointment_id)
     if not appt:
         raise HTTPException(404, "Not found")
-
-    # CUSTOMER: solo puede confirmar sus citas
-    if user.role.value == "CUSTOMER" and appt.customer_user_id != user.id:
+    if appt.customer_user_id != user.id:
         raise HTTPException(403, "Forbidden")
-
-    # Reglas de estado
     if appt.status != AppointmentStatus.VALIDATED:
         raise HTTPException(400, "Only VALIDATED appointments can be confirmed")
+
+    service = db.get(Service, appt.service_id)
+    if not service:
+        raise HTTPException(400, "Service not found")
+
+    # total pagado para esta cita
+    paid_total = db.execute(
+        select(func.coalesce(func.sum(CashEntry.amount), 0.0))
+        .where(CashEntry.appointment_id == appt.id)
+    ).scalar_one()
+
+    # ajusta el nombre del campo si no es "price"
+    service_price = float(service.price)
+
+    required = service_price * 0.50
+    if float(paid_total) < required:
+        raise HTTPException(
+            400,
+            f"To confirm, you must pay at least 50% of the service price. "
+            f"Required: {required:.2f} {settings.CURRENCY}, Paid: {float(paid_total):.2f} {settings.CURRENCY}"
+        )
 
     appt.status = AppointmentStatus.CONFIRMED
     db.commit()
     db.refresh(appt)
 
     public_cache.delete_prefix("pub:avail:")
+
     return appt
 
 

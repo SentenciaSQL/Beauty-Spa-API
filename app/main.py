@@ -3,14 +3,17 @@ import os
 from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 
-from app.core.db import Base, engine
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import router as v1_router
+from app.core.audit import register_audit_listeners
 from app.core.config import settings
+from app.middleware.audit_actor import AuditActorMiddleware
 
 
 def create_app():
     app = FastAPI(title="Spa API")
+
+    register_audit_listeners()
 
     app.add_middleware(
         CORSMiddleware,
@@ -21,8 +24,13 @@ def create_app():
         expose_headers=["Content-Disposition"],  # opcional (útil si luego descargas reportes)
     )
 
+    app.add_middleware(AuditActorMiddleware)
+
+
+
     os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
     app.mount(settings.MEDIA_URL_PREFIX, StaticFiles(directory=settings.MEDIA_ROOT), name="media")
+    # app.mount("/static", StaticFiles(directory="static"), name="static")
 
     app.include_router(v1_router)
 

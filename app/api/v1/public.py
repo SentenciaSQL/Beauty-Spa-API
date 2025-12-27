@@ -5,7 +5,7 @@ from sqlalchemy import select, or_
 
 from app.core.db import get_db
 from app.core.pagination import paginate
-from app.models import Slide, GalleryImage
+from app.models import Slide, GalleryImage, Testimonial
 from app.schemas.gallery import GalleryImageOut
 from app.schemas.pagination import Page
 from app.schemas.service import ServiceOut
@@ -20,6 +20,7 @@ from app.schemas.public_availability_summary import (
 )
 from app.core.public_cache import public_cache
 from app.schemas.slide import SlideOut
+from app.schemas.testimonial import TestimonialOut
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -197,4 +198,9 @@ def public_slides(db: Session = Depends(get_db)):
 @router.get("/gallery", response_model=list[GalleryImageOut])
 def public_gallery(db: Session = Depends(get_db)):
     stmt = select(GalleryImage).order_by(GalleryImage.sort_order.asc(), GalleryImage.id.asc())
+    return db.execute(stmt).scalars().all()
+
+@router.get("/testimonials", response_model=list[TestimonialOut])
+def public_testimonials(db: Session = Depends(get_db)):
+    stmt = select(Testimonial).order_by(Testimonial.sort_order.asc(), Testimonial.id.asc())
     return db.execute(stmt).scalars().all()

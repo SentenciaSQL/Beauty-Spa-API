@@ -2,6 +2,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
+from fastapi import Request
+from app.core.audit_context import current_actor_user_id
 from app.core.db import get_db
 from app.core.config import settings
 from app.models.user import User
@@ -20,6 +22,11 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
     user = db.get(User, int(user_id))
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+
+    # request.state.user_id = user.id
+    # current_actor_user_id.set(user.id)
+    db.info["actor_user_id"] = user.id
+
     return user
 
 def require_roles(*roles: str):
