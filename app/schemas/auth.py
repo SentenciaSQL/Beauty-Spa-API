@@ -1,8 +1,20 @@
+from typing import Optional
+
 from pydantic import BaseModel, EmailStr, Field
+
+class UserOut(BaseModel):
+    id: int
+    email: EmailStr
+    first_name: str
+    last_name: str
+    role: str
+    # opcional: por si quieres mostrarlo listo para UI
+    full_name: Optional[str] = None
 
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user: UserOut
 
 class RegisterCustomerIn(BaseModel):
     email: EmailStr

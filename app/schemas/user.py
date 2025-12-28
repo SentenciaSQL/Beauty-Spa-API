@@ -30,3 +30,8 @@ class UserOut(BaseModel):
     @field_serializer("role")
     def serialize_role(self, v):
         return v.value if isinstance(v, Role) else str(v)
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut

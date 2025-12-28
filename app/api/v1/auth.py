@@ -13,7 +13,7 @@ from app.core.reset_tokens import generate_reset_token, hash_token
 from app.core.security import verify_password, create_access_token, hash_password
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User, Role
-from app.schemas.auth import TokenOut, RegisterCustomerIn
+from app.schemas.auth import TokenOut, RegisterCustomerIn, UserOut
 from app.schemas.password_reset import ForgotPasswordIn, ResetPasswordIn
 
 router = APIRouter(prefix="/auth")
@@ -22,10 +22,23 @@ router = APIRouter(prefix="/auth")
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     stmt = select(User).where(User.email == form.username)
     user = db.execute(stmt).scalar_one_or_none()
+
     if not user or not verify_password(form.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
     token = create_access_token(sub=str(user.id), role=user.role.value)
-    return TokenOut(access_token=token)
+
+    return TokenOut(
+        access_token=token,
+        user=UserOut(
+            id=user.id,
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            role=user.role.value,
+            full_name=f"{user.first_name} {user.last_name}".strip(),
+        ),
+    )
 
 @router.post("/register", response_model=TokenOut)
 def register_customer(payload: RegisterCustomerIn, db: Session = Depends(get_db)):
@@ -40,6 +53,7 @@ def register_customer(payload: RegisterCustomerIn, db: Session = Depends(get_db)
         hashed_password=hash_password(payload.password),
         phone_e164=payload.phone_e164,
         role=Role.CUSTOMER,
+        whatsapp_opt_in=True,
         is_active=True,
     )
     try:
@@ -48,7 +62,17 @@ def register_customer(payload: RegisterCustomerIn, db: Session = Depends(get_db)
         db.refresh(user)
 
         token = create_access_token(sub=str(user.id), role=user.role.value)
-        return TokenOut(access_token=token)
+        return TokenOut(
+            access_token=token,
+            user=UserOut(
+                id=user.id,
+                email=user.email,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                role=user.role.value,
+                full_name=f"{user.first_name} {user.last_name}".strip(),
+            ),
+        )
     except:
         db.rollback()
         raise

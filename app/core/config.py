@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
 
@@ -13,7 +15,8 @@ class Settings(BaseSettings):
     BUSINESS_OPEN_TIME: str = "09:00"   # HH:MM
     BUSINESS_CLOSE_TIME: str = "18:00"  # HH:MM
 
-    CORS_ORIGINS: str = "http://localhost:4200"
+    # CORS_ORIGINS: str = "http://localhost:4200"
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "")
 
     FRONTEND_URL: str = "http://localhost:4200"
 
