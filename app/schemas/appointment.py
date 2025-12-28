@@ -1,4 +1,6 @@
 from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 class AppointmentCreate(BaseModel):
@@ -10,6 +12,7 @@ class AppointmentCreate(BaseModel):
 
 class AppointmentOut(BaseModel):
     id: int
+    service_id: int
     customer_user_id: int
     employee_user_id: int
     service_id: int
@@ -17,5 +20,13 @@ class AppointmentOut(BaseModel):
     end_at: datetime
     status: str
     notes: str | None
+    cancel_reason: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+class AppointmentReschedule(BaseModel):
+    start_at: datetime
+    step_minutes: int = 15
+
+class AppointmentCancel(BaseModel):
+    reason: Optional[str] = None

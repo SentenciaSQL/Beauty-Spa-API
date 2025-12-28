@@ -294,3 +294,92 @@ def revenue_by_method(
         "grand_total": float(grand_total),
         "items": items,
     }
+
+def _range_to_datetimes(from_day: date, to_day: date) -> tuple[datetime, datetime]:
+    tz = ZoneInfo(settings.TIMEZONE)
+    start = datetime.combine(from_day, time.min).replace(tzinfo=tz)
+    # inclusive end-day -> we use < next_day_start
+    end_exclusive = datetime.combine(to_day, time.min).replace(tzinfo=tz) + (datetime.resolution * 0)
+    # better:
+    end_exclusive = datetime.combine(to_day, time.min).replace(tzinfo=tz)
+    # move to next day start
+    end_exclusive = end_exclusive.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_exclusive = end_exclusive + (datetime.combine(date(2000,1,2), time.min) - datetime.combine(date(2000,1,1), time.min))
+    return start, end_exclusive
+
+@router.get(
+    "/revenue-by-method",
+    dependencies=[Depends(require_roles("ADMIN", "RECEPTIONIST"))],
+)
+def revenue_by_method(
+    db: Session = Depends(get_db),
+    from_day: date = Query(..., alias="from"),
+    to_day: date = Query(..., alias="to"),
+    group_by: str = Query("day", pattern="^(day|month)$"),
+):
+    tz = ZoneInfo(settings.TIMEZONE)
+    start_dt = datetime.combine(from_day, time.min).replace(tzinfo=tz)
+    end_dt = datetime.combine(to_day, time.min).replace(tzinfo=tz)
+    end_dt = end_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_dt = end_dt + (datetime(2000, 1, 2, tzinfo=tz) - datetime(2000, 1, 1, tzinfo=tz))  # +1 day
+
+    bucket = func.date_trunc("day" if group_by == "day" else "month", CashEntry.created_at).label("bucket")
+
+    stmt = (
+        select(
+            bucket,
+            CashEntry.method,
+            Appointment.status,
+            func.coalesce(func.sum(CashEntry.amount), 0).label("total"),
+            func.count(CashEntry.id).label("count"),
+        )
+        .select_from(CashEntry)
+        .join(Appointment, Appointment.id == CashEntry.appointment_id, isouter=True)
+        .where(CashEntry.created_at >= start_dt, CashEntry.created_at < end_dt)
+        .group_by(bucket, CashEntry.method, Appointment.status)
+        .order_by(bucket.asc())
+    )
+
+    rows = db.execute(stmt).all()
+
+    # build a clean JSON
+    series: dict[str, dict] = {}
+    for bucket_val, method, appt_status, total, count in rows:
+        bucket_key = bucket_val.astimezone(tz).strftime("%Y-%m-%d" if group_by == "day" else "%Y-%m")
+        method_key = method.value if hasattr(method, "value") else str(method)
+        status_key = appt_status.value if hasattr(appt_status, "value") else (str(appt_status) if appt_status else "NO_APPOINTMENT")
+
+        series.setdefault(bucket_key, {}).setdefault(method_key, {}).setdefault(status_key, {"total": 0, "count": 0})
+        series[bucket_key][method_key][status_key]["total"] = float(total)
+        series[bucket_key][method_key][status_key]["count"] = int(count)
+
+    # overall totals (same filters, no bucket)
+    totals_stmt = (
+        select(
+            CashEntry.method,
+            Appointment.status,
+            func.coalesce(func.sum(CashEntry.amount), 0).label("total"),
+            func.count(CashEntry.id).label("count"),
+        )
+        .select_from(CashEntry)
+        .join(Appointment, Appointment.id == CashEntry.appointment_id, isouter=True)
+        .where(CashEntry.created_at >= start_dt, CashEntry.created_at < end_dt)
+        .group_by(CashEntry.method, Appointment.status)
+        .order_by(CashEntry.method.asc())
+    )
+    totals_rows = db.execute(totals_stmt).all()
+
+    totals: dict[str, dict] = {}
+    for method, appt_status, total, count in totals_rows:
+        method_key = method.value if hasattr(method, "value") else str(method)
+        status_key = appt_status.value if hasattr(appt_status, "value") else (str(appt_status) if appt_status else "NO_APPOINTMENT")
+        totals.setdefault(method_key, {})[status_key] = {"total": float(total), "count": int(count)}
+
+    return {
+        "from": from_day.isoformat(),
+        "to": to_day.isoformat(),
+        "group_by": group_by,
+        "currency": settings.CURRENCY,
+        "totals_by_method_and_status": totals,
+        "series": series,
+    }

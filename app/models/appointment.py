@@ -33,6 +33,8 @@ class Appointment(Base):
     status: Mapped[AppointmentStatus] = mapped_column(Enum(AppointmentStatus), default=AppointmentStatus.REQUESTED, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     __table_args__ = (
         Index("ix_appt_employee_time", "employee_user_id", "start_at", "end_at"),
     )

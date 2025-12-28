@@ -5,7 +5,7 @@ from sqlalchemy import select, or_
 
 from app.core.db import get_db
 from app.core.pagination import paginate
-from app.models import Slide, GalleryImage, Testimonial
+from app.models import Slide, GalleryImage, Testimonial, Product, SiteSettings
 from app.schemas.gallery import GalleryImageOut
 from app.schemas.pagination import Page
 from app.schemas.service import ServiceOut
@@ -204,3 +204,49 @@ def public_gallery(db: Session = Depends(get_db)):
 def public_testimonials(db: Session = Depends(get_db)):
     stmt = select(Testimonial).order_by(Testimonial.sort_order.asc(), Testimonial.id.asc())
     return db.execute(stmt).scalars().all()
+
+@router.get("/home")
+def public_home(db: Session = Depends(get_db)):
+    settings = db.execute(select(SiteSettings)).scalars().first()
+
+    slides = db.execute(
+        select(Slide)
+        .where(Slide.is_active == True)
+        .order_by(Slide.sort_order.asc(), Slide.id.asc())
+        .limit(10)
+    ).scalars().all()
+
+    services = db.execute(
+        select(Service)
+        .where(Service.is_active == True)
+        .order_by(Service.is_featured.desc(), Service.sort_order.asc(), Service.id.asc())
+        .limit(12)
+    ).scalars().all()
+
+    products = db.execute(
+        select(Product)
+        .where(Product.is_active == True)
+        .order_by(Product.is_featured.desc(), Product.sort_order.asc(), Product.id.asc())
+        .limit(12)
+    ).scalars().all()
+
+    gallery = db.execute(
+        select(GalleryImage)
+        .order_by(GalleryImage.sort_order.asc(), GalleryImage.id.desc())
+        .limit(18)
+    ).scalars().all()
+
+    testimonials = db.execute(
+        select(Testimonial)
+        .order_by(Testimonial.date.desc(), Testimonial.id.desc())
+        .limit(10)
+    ).scalars().all()
+
+    return {
+        "settings": settings,
+        "slides": slides,
+        "services": services,
+        "products": products,
+        "gallery": gallery,
+        "testimonials": testimonials,
+    }

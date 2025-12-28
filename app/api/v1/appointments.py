@@ -2,15 +2,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from app.core.deps import get_current_user, require_roles
 from app.core.pagination import paginate
+from app.crud.scheduling_rules import assert_slot_is_valid
 from app.models import PaymentMethod, CashEntry
-from app.schemas.appointment import AppointmentCreate, AppointmentOut
+from app.schemas.appointment import AppointmentCreate, AppointmentOut, AppointmentReschedule
 from app.crud.appointments import create_appointment
 from app.core.public_cache import public_cache
 from app.schemas.appointment_done import AppointmentDoneOut
 from app.schemas.appointment_stats import (
     AppointmentStatsOut, StatusCountOut, ServiceRevenueOut
 )
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import Session, aliased
@@ -292,7 +293,7 @@ def list_appointments_view(
     return {"items": items, "page": page, "size": size, "total": total}
 
 
-@router.post("/{appointment_id}/cancel", response_model=AppointmentOut)
+@router.post("/{appointment_id}/cancel", response_model=AppointmentOut, dependencies=[Depends(require_roles("CUSTOMER", "RECEPTIONIST", "ADMIN"))])
 def cancel_appointment(
     appointment_id: int,
     db: Session = Depends(get_db),
@@ -304,23 +305,27 @@ def cancel_appointment(
 
     # Permisos:
     # - ADMIN / RECEPTIONIST pueden cancelar cualquiera
-    # - CUSTOMER solo la suya
+    # - CUSTOMER solo la suya (en cualquier momento, aunque falten 10 min)
     if user.role.value == "CUSTOMER" and appt.customer_user_id != user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # No permitir cancelar citas finalizadas
+    # No permitir cancelar estados finales
     if appt.status in (AppointmentStatus.DONE, AppointmentStatus.NO_SHOW):
         raise HTTPException(
             status_code=400,
             detail=f"Cannot cancel an appointment with status {appt.status}",
         )
 
-    # Cambia estado
+    # Evitar doble cancelación
+    if appt.status == AppointmentStatus.CANCELED:
+        raise HTTPException(status_code=400, detail="Appointment already canceled")
+
+    # Política: NO REEMBOLSO
+    # Importante: NO borrar/modificar CashEntry asociados
     appt.status = AppointmentStatus.CANCELED
     db.commit()
     db.refresh(appt)
 
-    # INVALIDA AVAILABILITY PUBLICA
     public_cache.delete_prefix("pub:avail:")
 
     return appt
@@ -484,3 +489,73 @@ def appointment_stats(
         revenue_estimated=revenue_estimated,
         by_service=by_service,
     )
+
+@router.get("/me", dependencies=[Depends(require_roles("CUSTOMER"))])
+def my_appointments(
+    db: Session = Depends(get_db),
+    user = Depends(get_current_user),
+    status: str | None = Query(default=None),
+    from_: date | None = Query(default=None, alias="from"),
+    to: date | None = Query(default=None),
+):
+    q = select(Appointment).where(Appointment.customer_user_id == user.id)
+
+    if status:
+        q = q.where(Appointment.status == status)
+
+    tz = ZoneInfo(settings.TIMEZONE)
+    if from_:
+        q = q.where(Appointment.start_at >= datetime.combine(from_, time.min, tzinfo=tz))
+    if to:
+        q = q.where(Appointment.start_at <= datetime.combine(to, time.max, tzinfo=tz))
+
+    q = q.order_by(Appointment.start_at.desc())
+
+    items = db.execute(q).scalars().all()
+    return {"items": items}
+
+@router.post("/{appointment_id}/reschedule", dependencies=[Depends(require_roles("CUSTOMER"))])
+def reschedule_appointment(
+    appointment_id: int,
+    payload: AppointmentReschedule,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    appt = db.get(Appointment, appointment_id)
+    if not appt:
+        raise HTTPException(404, "Not found")
+    if appt.customer_user_id != user.id:
+        raise HTTPException(403, "Forbidden")
+
+    if appt.status not in [AppointmentStatus.REQUESTED, AppointmentStatus.VALIDATED]:
+        raise HTTPException(400, "This appointment cannot be rescheduled")
+
+    service = db.get(Service, appt.service_id)
+    if not service:
+        raise HTTPException(400, "Service not found")
+
+    new_start = payload.start_at
+    new_end = new_start + timedelta(minutes=service.duration_minutes)
+
+    # Validación completa (horario + breaks + step + overlap)
+    assert_slot_is_valid(
+        db=db,
+        employee_user_id=appt.employee_user_id,
+        start_at=new_start,
+        end_at=new_end,
+        step_minutes=payload.step_minutes or 15,
+        ignore_appointment_id=appt.id,  # importante para no chocar con sí misma
+    )
+
+    appt.start_at = new_start
+    appt.end_at = new_end
+
+    # opcional: si ya estaba VALIDATED/CONFIRMED, lo devuelves a REQUESTED
+    # appt.status = AppointmentStatus.REQUESTED
+
+    db.commit()
+    db.refresh(appt)
+
+    public_cache.delete_prefix("pub:avail:")
+
+    return appt
