@@ -19,8 +19,6 @@ Designed to demonstrate **real-world business logic**, role-based security, paym
 
 ---
 
----
-
 ## 🚀 Features
 
 ## 👥 Roles & Permissions
