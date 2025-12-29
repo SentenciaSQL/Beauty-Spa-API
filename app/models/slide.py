@@ -12,6 +12,7 @@ class Slide(Base):
 
     title: Mapped[str] = mapped_column(String(120))
     subtitle: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    secondary_title: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     # si quieres: URL interna (/public/services) o absoluta (https://...)
     link_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

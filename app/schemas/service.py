@@ -20,5 +20,9 @@ class ServiceOut(BaseModel):
     duration_minutes: int
     price: float
     is_active: bool
+    image_url: str | None
+    sort_order: int | None = Field(default=None, ge=0)
+    is_popular: bool | None = None
+    is_deal: bool | None = None
 
     model_config = {"from_attributes": True}

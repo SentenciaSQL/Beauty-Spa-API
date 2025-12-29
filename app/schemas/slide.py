@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, HttpUrl
 class SlideBase(BaseModel):
     title: str = Field(min_length=2, max_length=120)
     subtitle: str | None = Field(default=None, max_length=200)
+    secondary_title: str | None = Field(default=None, max_length=120)
     link_url: str | None = Field(default=None, max_length=500)
     alt_text: str | None = Field(default=None, max_length=200)
 
@@ -19,6 +20,7 @@ class SlideCreate(SlideBase):
 class SlideUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=120)
     subtitle: str | None = Field(default=None, max_length=200)
+    secondary_title: str | None = Field(default=None, max_length=120)
     link_url: str | None = Field(default=None, max_length=500)
     alt_text: str | None = Field(default=None, max_length=200)
 

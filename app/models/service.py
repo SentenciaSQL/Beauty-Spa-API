@@ -16,3 +16,6 @@ class Service(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(timezone.utc),
                                                  onupdate=datetime.now(timezone.utc))
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    sort_order: Mapped[int | None] = mapped_column(Integer, default=0, index=True)
+    is_popular: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_deal: Mapped[bool] = mapped_column(Boolean, default=False)

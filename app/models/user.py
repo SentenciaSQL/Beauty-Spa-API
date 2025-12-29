@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime, timezone
-from sqlalchemy import String, Boolean, Enum, DateTime
+from sqlalchemy import String, Boolean, Enum, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.db import Base
 
@@ -26,3 +26,5 @@ class User(Base):
     phone_e164: Mapped[str | None] = mapped_column(String(20),nullable=True,index=True,)
     whatsapp_opt_in: Mapped[bool] = mapped_column(Boolean,default=False,nullable=False,)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    position: Mapped[str | None] = mapped_column(String(200))

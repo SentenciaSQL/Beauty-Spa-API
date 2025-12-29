@@ -5,7 +5,7 @@ from sqlalchemy import select, or_
 
 from app.core.db import get_db
 from app.core.pagination import paginate
-from app.models import Slide, GalleryImage, Testimonial, Product, SiteSettings
+from app.models import Slide, GalleryImage, Testimonial, Product, SiteSettings, SiteSocialLink
 from app.schemas.gallery import GalleryImageOut
 from app.schemas.pagination import Page
 from app.schemas.service import ServiceOut
@@ -219,14 +219,20 @@ def public_home(db: Session = Depends(get_db)):
     services = db.execute(
         select(Service)
         .where(Service.is_active == True)
-        .order_by(Service.is_featured.desc(), Service.sort_order.asc(), Service.id.asc())
-        .limit(12)
+        .order_by(Service.id.desc())
+    ).scalars().all()
+
+    employees = db.execute(
+        select(User)
+        .where(User.is_active == True)
+        .where(User.role == Role.EMPLOYEE)
+        .order_by(User.sort_order.asc(), User.id.asc())
     ).scalars().all()
 
     products = db.execute(
         select(Product)
         .where(Product.is_active == True)
-        .order_by(Product.is_featured.desc(), Product.sort_order.asc(), Product.id.asc())
+        .order_by(Product.id.asc())
         .limit(12)
     ).scalars().all()
 
@@ -238,15 +244,23 @@ def public_home(db: Session = Depends(get_db)):
 
     testimonials = db.execute(
         select(Testimonial)
-        .order_by(Testimonial.date.desc(), Testimonial.id.desc())
+        .order_by(Testimonial.testimonial_date.desc(), Testimonial.id.desc())
         .limit(10)
+    ).scalars().all()
+
+    site_socials = db.execute(
+        select(SiteSocialLink)
+        .where(SiteSocialLink.is_active == True)
+        .order_by(SiteSocialLink.id.asc())
     ).scalars().all()
 
     return {
         "settings": settings,
         "slides": slides,
         "services": services,
+        "employees": employees,
         "products": products,
         "gallery": gallery,
         "testimonials": testimonials,
+        "site_socials": site_socials,
     }

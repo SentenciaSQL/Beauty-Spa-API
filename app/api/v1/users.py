@@ -51,6 +51,9 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
         first_name=payload.first_name,
         last_name=payload.last_name,
         hashed_password=hash_password(payload.password),
+        phone_e164=payload.phone_e164,
+        whatsapp_opt_in=True,
+        position=payload.position,
         role=_parse_role(payload.role),
         is_active=True,
     )
@@ -90,6 +93,8 @@ def register_customer(payload: UserCreate, db: Session = Depends(get_db)):
         first_name=payload.first_name,
         last_name=payload.last_name,
         hashed_password=hash_password(payload.password),
+        phone_e164=payload.phone_e164,
+        whatsapp_opt_in=True,
         role=Role.CUSTOMER,
         is_active=True,
     )
@@ -103,9 +108,6 @@ def upload_employee_image(user_id: int, file: UploadFile = File(...), db: Sessio
     u = db.get(User, user_id)
     if not u:
         raise HTTPException(404, "User not found")
-
-    if getattr(u, "role", None) != "EMPLOYEE":
-        raise HTTPException(400, "Only EMPLOYEE can have an employee image")
 
     old_image = getattr(u, "image_url", None)
     old_thumb = getattr(u, "image_thumb_url", None)
