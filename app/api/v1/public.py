@@ -197,7 +197,7 @@ def public_slides(db: Session = Depends(get_db)):
 
 @router.get("/gallery", response_model=list[GalleryImageOut])
 def public_gallery(db: Session = Depends(get_db)):
-    stmt = select(GalleryImage).order_by(GalleryImage.sort_order.asc(), GalleryImage.id.asc())
+    stmt = select(GalleryImage).order_by(GalleryImage.created_at.desc())
     return db.execute(stmt).scalars().all()
 
 @router.get("/testimonials", response_model=list[TestimonialOut])
